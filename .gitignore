@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+*.log
+node_modules/
+.DS_Store
+private/
+credentials/
+executions/
+*secret*
