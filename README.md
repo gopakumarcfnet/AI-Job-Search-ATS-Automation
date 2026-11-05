@@ -269,3 +269,91 @@ See [`docs/GITHUB_PUBLISHING.md`](docs/GITHUB_PUBLISHING.md) for beginner-friend
 ## License
 
 No license has been selected. Until one is added, the default copyright restrictions apply. Choose an open-source license before inviting reuse.
+
+## Engineering Decisions & Trade-offs
+
+This project demonstrates the orchestration of AI, external APIs, document generation, and persistent state through an automated job-search pipeline. The following design decisions explain the architecture, operational considerations, and opportunities for improvement.
+
+### 1. Asynchronous Job Scraping — Apify
+
+**Decision:** Use Apify to execute LinkedIn job discovery asynchronously, with a polling loop that checks the execution status every 10 seconds.
+
+**Rationale:** Job scraping may take longer than a synchronous API request. Separating execution from result retrieval helps accommodate variable processing times.
+
+**Reliability controls:**
+- Retry failed HTTP requests.
+- Stop polling when the scraping job succeeds or fails.
+- Configure a maximum number of polling attempts.
+- Surface failures through an explicit error node.
+
+**Trade-off:** Polling is straightforward to implement but introduces repeated API calls and additional execution time. A webhook-based callback could reduce polling overhead.
+
+### 2. Duplicate Detection — Supabase
+
+**Decision:** Store processed job URLs and metadata in Supabase and compare newly discovered jobs against existing records.
+
+**Rationale:** Prevent repeated resume generation for previously processed job opportunities, reducing unnecessary AI and document conversion costs.
+
+**Trade-off:** URL-based deduplication is simple but may miss duplicate postings that use different tracking parameters or URLs.
+
+**Future improvement:** Normalize job URLs, enforce database uniqueness, and implement upsert operations to handle concurrent executions safely.
+
+### 3. AI-Assisted Resume Optimization — Google Gemini
+
+**Decision:** Use a Gemini-powered AI agent to tailor an existing master resume to each job description.
+
+**Rationale:** Reuse verified professional experience while improving alignment with job-specific responsibilities and ATS terminology.
+
+**Controls:**
+- Provide the master resume as source context.
+- Require a structured output format.
+- Instruct the AI not to invent employers, employment dates, qualifications, or performance metrics.
+
+**Trade-off:** Prompt instructions alone cannot guarantee factual accuracy or consistent formatting.
+
+**Future improvement:** Add schema validation, automated factual consistency checks, and human approval before application submission.
+
+### 4. Multi-Format Resume Generation — PDF and Word
+
+**Decision:** Generate two resume formats from a common parsed representation: LaTeX for PDF and HTML converted to DOCX.
+
+**Rationale:** PDF supports consistent visual presentation, while DOCX provides an editable version for recruiters and applicants.
+
+**Trade-off:** Maintaining two rendering paths introduces additional dependencies and potential formatting differences.
+
+**Future improvement:** Add automated document validation, PDF rendering checks, and tests for special characters, employment dates, and long bullet points.
+
+### 5. Cost and Resource Controls
+
+**Decision:** Limit the number of jobs processed per execution and filter previously processed opportunities before invoking AI and document-generation services.
+
+**Rationale:** AI inference, scraping, and file conversion can incur variable costs. Limiting processing volume provides a predictable operational boundary.
+
+**Current controls:**
+- Configurable maximum jobs per run.
+- Duplicate filtering before resume tailoring.
+- Scheduled daily execution.
+- Bounded polling attempts.
+
+**Trade-off:** Limiting daily throughput may defer relevant job opportunities to subsequent executions.
+
+**Future improvement:** Introduce cost-per-job telemetry, usage dashboards, budget thresholds, and prioritization based on job relevance.
+
+### 6. Privacy and Responsible AI
+
+**Decision:** Keep credentials in n8n credential storage and publish a sanitized workflow export rather than the private production configuration.
+
+**Considerations:**
+- Resume contents are transmitted to external AI and conversion services.
+- Generated documents may contain personally identifiable information.
+- Google Drive access permissions must be configured appropriately.
+- Public GitHub files must not contain tokens, private document identifiers, or personal resume content.
+- AI-generated resumes require factual review before use.
+
+### 7. Current Limitations
+
+This project is a portfolio/reference implementation rather than a fully validated production service.
+
+Known limitations include third-party scraper reliability, potential changes to LinkedIn access policies, AI-generated formatting inconsistencies, multi-item data alignment risks, and the possibility of recording a job as processed before document generation completes.
+
+Future iterations will focus on improved error recovery, stronger output validation, end-to-end observability, and transactional processing.
